@@ -33,3 +33,39 @@ XV6内核共享了内存，并且XV6支持内核线程的概念，对于每个�
 - 定时器中断将CPU控制权给到内核，内核再自愿的出让CPU。
 实际上的做法: 定时器中断会强制的将CPU控制权从用户进程给到内核，这里是pre-emptive scheduling，  
 之后内核会代表用户进程（注，实际是内核中用户进程对应的内核线程会代表用户进程出让CPU），使用voluntary scheduling。
+
+# 7、线程第一次调度
+1. 第一次调用switch时，“另一个”调用swtch函数的线程的context对象。
+proc.c文件中的allocproc函数会被启动时的第一个进程和fork调用，allocproc会设置好新进程的context
+```c
+  // Set up new context to start executing at forkret,
+  // which returns to user space.
+  memset(&p->context, 0, sizeof(p->context));
+  p->context.ra = (uint64)forkret;
+  p->context.sp = p->kstack + PGSIZE;
+```
+
+2. 调度器调度这个线程后，会直接跳转到forkret函数
+```c
+// A fork child's very first scheduling by scheduler()
+// will swtch to forkret.
+void
+forkret(void)
+{
+  static int first = 1;
+
+  // Still holding p->lock from scheduler.
+  release(&myproc()->lock);
+
+  if (first) {
+    // File system initialization must be run in the context of a
+    // regular process (e.g., because it calls sleep), and thus cannot
+    // be run from main().
+    first = 0;
+    fsinit(ROOTDEV);
+  }
+
+  usertrapret();
+}
+```
+执行一些初始化操作
