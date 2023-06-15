@@ -40,3 +40,62 @@
 
 ## bread，bwrite
 一旦bread从磁盘读取（如果需要）并将缓冲区返回给调用者，调用者就独占了该缓冲区，并可以读取或写入数据字节。如果调用者修改了缓冲区，必须在释放缓冲区之前调用bwrite将更改后的数据写入磁盘。
+
+
+# 5、inode
+```c
+struct dinode {
+  short type;           // File type
+  short major;          // Major device number (T_DEVICE only)
+  short minor;          // Minor device number (T_DEVICE only)
+  short nlink;          // Number of links to inode in file system
+  uint size;            // Size of file (bytes)
+  uint addrs[NDIRECT+1];   // Data block addresses
+};
+```
+
+类型字段区分文件、目录和特殊文件（设备）  类型为零表示磁盘上的inode为空闲。  
+nlink字段计算引用此inode的目录项数目  
+size字段记录文件中内容的字节数  
+addrs数组记录持有文件内容的磁盘块的块编号  
+
+
+
+# 6、sectors block
+> sector通常是磁盘驱动可以读写的最小单元，它过去通常是512字节。  
+> block通常是操作系统或者文件系统视角的数据。它由文件系统定义，在XV6中它是1024字节。所以XV6中一个block对应两个sector。通常来说一个block对应了一个或者多个sector。
+
+
+# 7、direct block number 与 indirect block number
+
+> XV6的inode中总共有12个block编号。这些被称为direct block number。这12个block编号指向了构成文件的前12个block。举个例子，如果文件只有2个字节，那么只会有一个block编号0，它包含的数字是磁盘上文件前2个字节的block的位置。  
+> 之后还有一个indirect block number，它对应了磁盘上一个block，这个block包含了256个block number，这256个block number包含了文件的数据。所以inode中block number 0到block number 11都是direct block number，而block number 12保存的indirect block number指向了另一个block。
+
+
+# 8、block编号与能支持的磁盘大小
+一个int类型占4字节，因此一个block(1kb)可以储存256个block编号，4字节为32位，因此支持的磁盘大小为$2^32$个block，也就是4TB
+
+# 9、目录
+每一个目录包含了directory entries，每一条entry都有固定的格式：
+- 前2个字节包含了目录中文件或者子目录的inode编号，
+- 接下来的14个字节包含了文件或者子目录名。  
+一条目录共16个字节
+
+# 10、根据路径索引文件过程
+## 如/y/x
+先从root inode 开始，这个inode有固定存取位置，在direct block和indirect block中搜索y这个文件，  
+索引到后拿到y的block inode编号，跳转到这个inode 以此类推
+
+# 11、创建文件过程
+动作：block number
+1. write：33   //寻找空闲的inode，改变inode的type
+2. write：33   //实际写入inode的东西，比如nlink = 1等
+3. write：46   //在根目录下创建文件，因此需要增加一条目录
+4. write：32   //改变根目录大小
+5. write：33
+
+# 12、写入文件的过程
+1. write：45  //更新bitmap，找到一个未被使用的block
+2. write：595 //写入几个字符调用几次
+3. write：595
+4. write：33  //inode更新size
